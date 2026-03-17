@@ -22,7 +22,7 @@
     "react-dom": "^19.0.0",
     "recharts": "^2.13.0",
     "tailwind-merge": "^2.5.5",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.1/xlsx-0.20.1.tgz"
   },
   "devDependencies": {
     "@types/node": "^20",
