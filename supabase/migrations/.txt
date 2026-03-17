@@ -1,0 +1,5 @@
+To add new users, insert their email into allowed_emails before they sign in:
+
+
+
+INSERT INTO allowed_emails (email, role) VALUES ('someone@gmail.com', 'student');

@@ -1,0 +1,739 @@
+## ROLE & MISSION
+
+You are an expert full-stack TypeScript developer. Your task is to build **BrightFuture Academy & EduCloud** — a production-ready multi-role coaching institute management platform from scratch, using the provided reference UI components as the exact visual and structural foundation.
+
+Do NOT deviate from the established design language. Do NOT use mock data in production flows. Every piece of data must be persisted in Supabase and fetched via the Supabase JS client.
+
+---
+
+## REFERENCE UI — DESIGN SYSTEM (MUST FOLLOW EXACTLY)
+
+These are the exact design tokens extracted from the provided reference components:
+
+### Color Palette
+```
+Primary Accent (Landing + Super Admin): #13ec80  (bright green)
+Primary Accent (Branch Dashboard):      #22c55e  (tailwind green-500)
+WhatsApp Green:                         #25D366
+Background Deep:                        #0a0a0a / #0f0f0f
+Surface Card:                           #1a1a1a / #1b1b1b
+Border:                                 #2a2a2a / #2d2d2d / white/5 / white/10
+Text Primary:                           white / slate-100
+Text Secondary:                         slate-400 / slate-500
+Text Muted:                             neutral-400 / neutral-500
+Danger:                                 red-500
+```
+
+### Typography & Shape
+- Font: `font-sans` (system sans), font-black for hero numbers, font-bold for headings
+- Rounded corners: `rounded-lg` (inputs/buttons), `rounded-xl` (cards), `rounded-2xl` (modals/large cards), `rounded-3xl` (section blocks)
+- Borders: always `border border-[#2a2a2a]` or `border border-white/10` — never harsh white borders
+- Shadows: `shadow-sm` on cards, `shadow-2xl` on modals
+
+### Component Patterns
+- **Stat Cards**: icon in colored bg-[accent]/10 container, label + value + trend badge
+- **Tables**: `divide-y divide-[#2a2a2a]`, hover:bg-white/5, text-xs uppercase tracking-wider headers
+- **Buttons Primary**: `bg-[#13ec80] text-black font-bold` or `bg-[#22c55e] text-black font-bold`
+- **Buttons Ghost**: `bg-white/5 border border-[#2d2d2d]` with hover:bg-white/10
+- **Modals**: dark `#1b1b1b` bg, border border-white/10, `backdrop-blur-sm` overlay, success state with bouncing CheckCircle2
+- **Nav (Landing)**: sticky, `bg-black/80 backdrop-blur-md border-b border-white/10`
+- **Sidebar (Super Admin)**: 80px icon-only, fixed left, icons switch to `text-[#13ec80] bg-[#13ec80]/10` when active
+- **Sidebar (Branch)**: 264px labeled sidebar on desktop, bottom tab bar on mobile
+- **Status Badges**: `bg-[accent]/10 text-[accent] text-[10px] font-bold rounded uppercase px-2 py-1`
+- **Notification dot**: `animate-ping` with `bg-[#13ec80]`
+
+---
+
+## TECH STACK
+
+```
+Frontend:   React 19, TypeScript, TailwindCSS v4, Vite 6
+Backend:    Supabase (PostgreSQL + Auth + RLS + Storage + Realtime)
+Auth:       Google OAuth ONLY via Supabase (no email/password login)
+Icons:      lucide-react
+Charts:     recharts
+Animation:  motion (framer-motion v12)
+Utilities:  clsx, tailwind-merge (cn utility)
+```
+
+**File Structure:**
+```
+src/
+  components/       # Shared UI: Modal.tsx, Button.tsx, etc.
+  pages/            # LandingPage, StudentPortal, BranchDashboard, AdminDashboard
+  hooks/            # useAuth, useSupabase, useBranch, useStudents, etc.
+  lib/              # supabaseClient.ts, utils.ts (cn)
+  types/            # index.ts with all TypeScript interfaces
+  constants/        # Only for static UI data (nav labels, etc.) — NOT for DB data
+```
+
+---
+
+## ENVIRONMENT VARIABLES
+
+Create `.env.local`:
+```
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+Create `src/lib/supabaseClient.ts`:
+```typescript
+import { createClient } from '@supabase/supabase-js'
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
+```
+
+---
+
+## DATABASE SCHEMA
+
+Run these SQL migrations in Supabase SQL editor in order:
+
+### 1. Branches
+```sql
+create table public.branches (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  city text,
+  address text,
+  phone text,
+  email text,
+  logo_url text,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+alter table public.branches enable row level security;
+-- Super admin: full access. Branch admin: read own. Student: read own.
+create policy "super_admin_all_branches" on public.branches
+  using (auth.jwt() ->> 'role' = 'super_admin');
+create policy "branch_admin_read_own" on public.branches
+  for select using (
+    id in (select branch_id from public.profiles where id = auth.uid())
+  );
+create policy "student_read_own_branch" on public.branches
+  for select using (
+    id in (select branch_id from public.profiles where id = auth.uid())
+  );
+```
+
+### 2. Profiles (extends auth.users)
+```sql
+create table public.profiles (
+  id uuid references auth.users(id) on delete cascade primary key,
+  email text unique not null,
+  full_name text,
+  avatar_url text,
+  role text not null check (role in ('super_admin', 'branch_admin', 'student')),
+  branch_id uuid references public.branches(id),
+  phone text,
+  created_at timestamptz default now()
+);
+alter table public.profiles enable row level security;
+create policy "users_read_own_profile" on public.profiles
+  for select using (id = auth.uid());
+create policy "super_admin_read_all_profiles" on public.profiles
+  for select using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'super_admin')
+  );
+create policy "branch_admin_read_branch_profiles" on public.profiles
+  for select using (
+    branch_id in (select branch_id from public.profiles where id = auth.uid())
+  );
+create policy "super_admin_update_profiles" on public.profiles
+  for update using (
+    exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'super_admin')
+  );
+create policy "users_update_own" on public.profiles
+  for update using (id = auth.uid());
+create policy "users_insert_own" on public.profiles
+  for insert with check (id = auth.uid());
+```
+
+### 3. Auto-create profile on Google signup (Edge Function or DB trigger)
+```sql
+-- DB trigger to upsert profile on first login
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (id, email, full_name, avatar_url, role)
+  values (
+    new.id,
+    new.email,
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'avatar_url',
+    coalesce(
+      (select role from public.profiles where email = new.email limit 1),
+      'student'  -- default role; super_admin pre-seeds role before user signs in
+    )
+  )
+  on conflict (id) do update set
+    full_name = excluded.full_name,
+    avatar_url = excluded.avatar_url;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+```
+
+### 4. Courses
+```sql
+create table public.courses (
+  id uuid primary key default gen_random_uuid(),
+  branch_id uuid references public.branches(id) on delete cascade,
+  name text not null,
+  description text,
+  category text,  -- e.g. 'Science', 'Commerce', 'Foundation'
+  duration_months int,
+  fee numeric,
+  image_url text,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+alter table public.courses enable row level security;
+create policy "super_admin_all_courses" on public.courses using (
+  exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'super_admin')
+);
+create policy "branch_admin_own_courses" on public.courses using (
+  branch_id in (select branch_id from public.profiles where id = auth.uid())
+);
+create policy "public_read_active_courses" on public.courses
+  for select using (is_active = true);
+```
+
+### 5. Batches
+```sql
+create table public.batches (
+  id uuid primary key default gen_random_uuid(),
+  branch_id uuid references public.branches(id) on delete cascade,
+  course_id uuid references public.courses(id),
+  name text not null,
+  start_date date,
+  end_date date,
+  schedule text,
+  capacity int default 40,
+  is_active boolean default true,
+  created_at timestamptz default now()
+);
+alter table public.batches enable row level security;
+create policy "branch_all_own_batches" on public.batches using (
+  branch_id in (select branch_id from public.profiles where id = auth.uid())
+);
+```
+
+### 6. Enrollments
+```sql
+create table public.enrollments (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid references public.profiles(id) on delete cascade,
+  batch_id uuid references public.batches(id) on delete cascade,
+  enrolled_at timestamptz default now(),
+  status text default 'active' check (status in ('active', 'completed', 'dropped')),
+  unique(student_id, batch_id)
+);
+alter table public.enrollments enable row level security;
+create policy "student_read_own_enrollments" on public.enrollments
+  for select using (student_id = auth.uid());
+create policy "branch_admin_manage_enrollments" on public.enrollments using (
+  batch_id in (
+    select b.id from public.batches b
+    join public.profiles p on p.branch_id = b.branch_id
+    where p.id = auth.uid()
+  )
+);
+```
+
+### 7. Results
+```sql
+create table public.results (
+  id uuid primary key default gen_random_uuid(),
+  enrollment_id uuid references public.enrollments(id) on delete cascade,
+  exam_name text not null,
+  exam_date date,
+  subject text,
+  marks_obtained numeric not null,
+  total_marks numeric not null default 100,
+  grade text,
+  rank int,
+  status text,  -- 'EXCELLENT', 'PASS', 'FAIL', 'TOP 5%'
+  published_at timestamptz,
+  created_at timestamptz default now()
+);
+alter table public.results enable row level security;
+create policy "student_read_own_results" on public.results
+  for select using (
+    enrollment_id in (select id from public.enrollments where student_id = auth.uid())
+  );
+create policy "branch_admin_manage_results" on public.results using (
+  enrollment_id in (
+    select e.id from public.enrollments e
+    join public.batches b on b.id = e.batch_id
+    join public.profiles p on p.branch_id = b.branch_id
+    where p.id = auth.uid()
+  )
+);
+```
+
+### 8. Attendance
+```sql
+create table public.attendance (
+  id uuid primary key default gen_random_uuid(),
+  enrollment_id uuid references public.enrollments(id) on delete cascade,
+  date date not null,
+  status text check (status in ('present', 'absent', 'late')),
+  marked_by uuid references public.profiles(id),
+  created_at timestamptz default now(),
+  unique(enrollment_id, date)
+);
+alter table public.attendance enable row level security;
+create policy "student_read_own_attendance" on public.attendance
+  for select using (
+    enrollment_id in (select id from public.enrollments where student_id = auth.uid())
+  );
+create policy "branch_admin_manage_attendance" on public.attendance using (
+  enrollment_id in (
+    select e.id from public.enrollments e
+    join public.batches b on b.id = e.batch_id
+    join public.profiles p on p.branch_id = b.branch_id
+    where p.id = auth.uid()
+  )
+);
+```
+
+### 9. Enquiries (from Landing Page)
+```sql
+create table public.enquiries (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text,
+  phone text,
+  course_interest text,
+  grade text,
+  message text,
+  type text check (type in ('demo', 'enquiry', 'brochure')),
+  status text default 'new' check (status in ('new', 'contacted', 'converted')),
+  branch_id uuid references public.branches(id),
+  created_at timestamptz default now()
+);
+alter table public.enquiries enable row level security;
+create policy "public_insert_enquiries" on public.enquiries
+  for insert with check (true);
+create policy "branch_admin_read_enquiries" on public.enquiries
+  for select using (
+    branch_id in (select branch_id from public.profiles where id = auth.uid())
+  );
+create policy "super_admin_all_enquiries" on public.enquiries using (
+  exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'super_admin')
+);
+```
+
+### 10. Toppers (for Landing Page)
+```sql
+create table public.toppers (
+  id uuid primary key default gen_random_uuid(),
+  student_name text not null,
+  exam_name text not null,
+  percentage text not null,
+  image_url text,
+  branch_id uuid references public.branches(id),
+  year int default extract(year from now())::int,
+  display_order int default 0,
+  is_featured boolean default true
+);
+alter table public.toppers enable row level security;
+create policy "public_read_toppers" on public.toppers for select using (is_featured = true);
+create policy "branch_admin_manage_toppers" on public.toppers using (
+  branch_id in (select branch_id from public.profiles where id = auth.uid())
+);
+```
+
+---
+
+## AUTHENTICATION FLOW
+
+### `src/hooks/useAuth.ts`
+```typescript
+import { useEffect, useState } from 'react'
+import { Session, User } from '@supabase/supabase-js'
+import { supabase } from '../lib/supabaseClient'
+import { Profile } from '../types'
+
+export function useAuth() {
+  const [session, setSession] = useState<Session | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      if (session) fetchProfile(session.user)
+      else setLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      if (session) fetchProfile(session.user)
+      else { setProfile(null); setLoading(false) }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function fetchProfile(user: User) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*, branches(*)')
+      .eq('id', user.id)
+      .single()
+    setProfile(data)
+    setLoading(false)
+  }
+
+  const signInWithGoogle = () => supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin }
+  })
+
+  const signOut = () => supabase.auth.signOut()
+
+  return { session, profile, loading, signInWithGoogle, signOut }
+}
+```
+
+### `src/App.tsx` — Role-based routing
+```typescript
+function App() {
+  const { profile, loading, signInWithGoogle } = useAuth()
+
+  if (loading) return <SplashScreen />
+
+  // Not logged in: always show LandingPage with sign-in option
+  if (!profile) return <LandingPage onSignIn={signInWithGoogle} />
+
+  // Role-based routing
+  switch (profile.role) {
+    case 'super_admin':   return <AdminDashboard profile={profile} />
+    case 'branch_admin':  return <BranchDashboard profile={profile} />
+    case 'student':       return <StudentPortal profile={profile} />
+    default:              return <UnauthorizedPage />
+  }
+}
+```
+
+---
+
+## PAGE-BY-PAGE SPECIFICATIONS
+
+### 1. LANDING PAGE (`LandingPage.tsx`)
+
+**Visual Reference:** Black background (`#0a0a0a`), accent `#13ec80`, matches provided file exactly.
+
+**All sections (implement all of these):**
+- Sticky navbar: Logo left, nav links center, "Sign In with Google" button right (opens Supabase Google OAuth)
+- Hero: Full-width split layout — image left, headline + CTAs right. "Book Demo Class" opens modal
+- Stats bar: 15+ Years / 5000+ Students / 98% Success / 50+ Faculty — animated count-up on scroll
+- Courses grid: Fetched from `courses` table (is_active=true). Each card has "Enquire Now" button → modal saves to `enquiries` table
+- Toppers carousel: Fetched from `toppers` table. Horizontal scroll, snap-x
+- Testimonials: Static or fetched from a `testimonials` table
+- Footer: 4 columns — About, Quick Links, Courses, Contact
+- Book Demo modal: Form → insert into `enquiries` table (type='demo')
+- Enquiry modal: Form → insert into `enquiries` table (type='enquiry')
+
+**Auth integration:** "Sign In with Google" in nav. After OAuth, App.tsx routes to correct dashboard.
+
+---
+
+### 2. STUDENT PORTAL (`StudentPortal.tsx`)
+
+**Visual Reference:** Dark `#0a0a0a`, accent `#22c55e`, mobile-first card layout, matches provided file exactly.
+
+**Tabs/Sections:**
+- **My Results**: Fetch from `results` joined with `enrollments` where `student_id = auth.uid()`. Card per result with: title, subject, marks/total, percentage (huge number), date, status badge. Color border: green if EXCELLENT/TOP5%, neutral otherwise
+- **My Attendance**: Fetch from `attendance` joined via `enrollments`. Calendar-style month view with present/absent/late indicators + overall percentage stat
+- **My Batches**: Fetch enrollments → batches → courses. Show batch name, schedule, course name, status
+- **Profile**: Show Google avatar, name, email, branch name, enrolled batch. Non-editable.
+
+**Stats cards (top):** Avg Score, Exams Taken, Attendance %, Current Batch — fetched live.
+
+**"Download All Reports" button:** Generates a simple HTML report of all results and triggers browser print/download.
+
+**Nav:** Google avatar top-right, logout icon. Mobile-optimized with bottom tab bar.
+
+---
+
+### 3. BRANCH DASHBOARD (`BranchDashboard.tsx`)
+
+**Visual Reference:** `#0f0f0f` bg, `#22c55e` accent, wide sidebar on desktop (264px labeled), bottom tab bar on mobile. Matches provided file exactly.
+
+**Sidebar tabs:** Dashboard | Students | Teachers | Results | Settings
+
+**Dashboard tab:**
+- 4 stat cards: Total Students (count from enrollments where batch.branch_id = admin's branch_id), Total Teachers, Active Batches, Results Uploaded
+- Students table (preview, 5 rows)
+- Recent Results summary
+
+**Students tab:**
+- Table: name, initials avatar, class/batch, roll no, performance bar
+- Search bar (filters live by name/roll)
+- Import from Excel button → Modal with drag-drop file upload
+- Add Student button → Modal form → inserts into `profiles` (role=student) and `enrollments`
+- Edit/Delete actions per row
+- Performance bar: calculate from avg of their results
+
+**Teachers tab:**
+- Table: avatar (Google photo or placeholder), name, subject badge, assigned batch, remove button
+- Add Teacher button → Modal → inserts into `profiles` (role=student initially; teacher management is a separate concept — add a `teachers` table linked to branch)
+
+**Results tab:**
+- Batch/class selector dropdown (fetches batches for this branch)
+- Editable inline spreadsheet: Student Name | Subject 1 | Subject 2 | Subject 3 | Total — all score cells are `<input type="number">`
+- Right panel: Class Insights — avg score, top performer, score distribution bar chart
+- "Save Results" button → upserts all rows into `results` table
+- "Import Excel" button → parse .xlsx using SheetJS, map columns to results schema, bulk insert
+- "WhatsApp" button → Modal shows message template + count of parents → integrate with WhatsApp Business API or show a copied wa.me deep link per student
+- "Publish" toggle → sets `published_at` on all results for this batch/exam
+
+**Settings tab:**
+- Editable branch name, contact email, phone
+- Toggle: "Public Results" (allow students to see)
+- Save button → updates `branches` table
+
+---
+
+### 4. SUPER ADMIN DASHBOARD (`AdminDashboard.tsx`)
+
+**Visual Reference:** `#0f0f0f` bg, `#13ec80` accent, icon-only sidebar (80px), header with EduCloud branding. Matches provided file exactly.
+
+**Sidebar icons (with tooltips):** Dashboard | Branches | Admins | Courses | Settings | Logout
+
+**Dashboard tab:**
+- 4 stat cards: Total Branches, Total Students, Total Teachers, Results Uploaded — all fetched with COUNT queries
+- "Recent Branches" table (latest 3 branches)
+- Bar chart: monthly enrollment trend (recharts BarChart)
+- "Branch Admins" list (latest 3, with email button)
+- Regional distribution: group branches by city → progress bars showing %
+
+**Branches tab:**
+- Full table: branch name (colored initial avatar), city, student count, teacher count, assigned admin, edit/delete actions
+- "Add Branch" button → Modal form (name, city, address, phone, email) → inserts into `branches`
+- Edit branch → pre-filled modal → updates `branches`
+- Delete with confirm dialog → deletes branch (cascade deletes batches, enrollments, etc.)
+
+**Admins tab:**
+- Table: admin avatar (from profile), name, assigned branch, status badge, email button
+- "Invite Admin" button → Modal: enter email + select branch → PRE-SEEDS `profiles` table with (email, role='branch_admin', branch_id) BEFORE the person signs in. When they sign in with Google, the trigger finds their pre-seeded record and assigns the correct role.
+- Revoke access: delete profile record or set role to null
+
+**Courses tab:**
+- Card grid (3 cols): each card has icon, course name, student count, edit/delete
+- "Add Course" button → Modal (name, description, category, assign to branch or global) → inserts into `courses`
+
+**Enquiries tab** (add this):
+- Table of all enquiries from Landing Page: name, phone, course interest, type badge, status, date
+- Status update: 'new' → 'contacted' → 'converted'
+- Branch filter dropdown
+
+**Settings tab:**
+- Maintenance mode toggle (stored in a `settings` table or Supabase config)
+- Auto-backup toggle (cosmetic or integrate with Supabase scheduled functions)
+
+---
+
+## SHARED COMPONENTS TO BUILD
+
+### `src/components/Modal.tsx`
+Use the provided reference file exactly. Already implemented correctly.
+
+### `src/components/GoogleSignInButton.tsx`
+```tsx
+<button onClick={signInWithGoogle} className="flex items-center gap-3 bg-white text-black font-bold px-6 py-3 rounded-lg hover:bg-white/90 transition-colors">
+  <GoogleIcon /> Sign in with Google
+</button>
+```
+
+### `src/components/SplashScreen.tsx`
+Centered logo with a pulsing green dot and "Loading..." — matches dark theme.
+
+### `src/components/SuccessState.tsx`
+Reusable bouncing CheckCircle2 success state used inside modals — extract from existing pattern.
+
+### `src/lib/utils.ts`
+```typescript
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }
+```
+
+---
+
+## TYPESCRIPT TYPES (`src/types/index.ts`)
+
+```typescript
+export interface Branch {
+  id: string; name: string; city: string; address?: string;
+  phone?: string; email?: string; logo_url?: string; is_active: boolean; created_at: string;
+}
+export interface Profile {
+  id: string; email: string; full_name: string; avatar_url?: string;
+  role: 'super_admin' | 'branch_admin' | 'student';
+  branch_id?: string; phone?: string; branches?: Branch; created_at: string;
+}
+export interface Course {
+  id: string; branch_id?: string; name: string; description?: string;
+  category?: string; duration_months?: number; fee?: number;
+  image_url?: string; is_active: boolean;
+}
+export interface Batch {
+  id: string; branch_id: string; course_id: string; name: string;
+  start_date?: string; end_date?: string; schedule?: string;
+  capacity?: number; is_active: boolean; courses?: Course;
+}
+export interface Enrollment {
+  id: string; student_id: string; batch_id: string;
+  enrolled_at: string; status: 'active' | 'completed' | 'dropped';
+  profiles?: Profile; batches?: Batch;
+}
+export interface Result {
+  id: string; enrollment_id: string; exam_name: string; exam_date?: string;
+  subject?: string; marks_obtained: number; total_marks: number;
+  grade?: string; rank?: number; status?: string; published_at?: string;
+  enrollments?: Enrollment;
+}
+export interface Attendance {
+  id: string; enrollment_id: string; date: string;
+  status: 'present' | 'absent' | 'late'; marked_by?: string;
+}
+export interface Enquiry {
+  id: string; name: string; email?: string; phone?: string;
+  course_interest?: string; grade?: string; message?: string;
+  type: 'demo' | 'enquiry' | 'brochure'; status: 'new' | 'contacted' | 'converted';
+  branch_id?: string; created_at: string;
+}
+export interface Topper {
+  id: string; student_name: string; exam_name: string; percentage: string;
+  image_url?: string; branch_id?: string; year: number; display_order: number;
+}
+```
+
+---
+
+## DATA FETCHING PATTERNS
+
+### Always use custom hooks:
+```typescript
+// src/hooks/useStudents.ts
+export function useStudents(branchId: string) {
+  const [students, setStudents] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'student')
+      .eq('branch_id', branchId)
+      .then(({ data }) => { setStudents(data ?? []); setLoading(false) })
+  }, [branchId])
+
+  const addStudent = async (student: Partial<Profile>) => {
+    const { data } = await supabase.from('profiles').insert(student).select().single()
+    if (data) setStudents(prev => [data, ...prev])
+  }
+
+  const deleteStudent = async (id: string) => {
+    await supabase.from('profiles').delete().eq('id', id)
+    setStudents(prev => prev.filter(s => s.id !== id))
+  }
+
+  return { students, loading, addStudent, deleteStudent }
+}
+```
+
+Build similar hooks for: `useBranches`, `useCourses`, `useBatches`, `useResults`, `useAttendance`, `useEnquiries`, `useToppers`
+
+---
+
+## CRITICAL IMPLEMENTATION RULES
+
+1. **NEVER hardcode data** that should come from Supabase. The `constants.ts` file is ONLY for static UI config (nav labels, chart colors, etc.)
+
+2. **RLS is the security layer** — trust it. Don't do role checks in frontend code for data visibility; let Supabase RLS policies enforce it.
+
+3. **Optimistic updates** — update local state immediately on mutation, roll back on error.
+
+4. **Loading states** — every data fetch must show a skeleton or spinner matching the dark theme: `bg-white/5 animate-pulse rounded-xl`
+
+5. **Error states** — show inline error messages in red: `text-red-400 text-sm`
+
+6. **Form validation** — all required fields, proper `type` attributes, focus ring uses accent color
+
+7. **Mobile-first** — every page must work on 375px screens. Branch and Admin dashboards switch to bottom tab navigation on mobile.
+
+8. **Auth guard** — App.tsx is the ONLY place role-routing happens. Never put auth logic inside individual pages.
+
+9. **Google sign-in** is the ONLY auth method. Remove any email/password flows.
+
+10. **Pre-seeding roles** — The super_admin manually inserts a profile row with `{email, role, branch_id}` before inviting someone. The DB trigger handles the rest when they sign in.
+
+---
+
+## BUILD ORDER (follow this sequence)
+
+```
+Phase 1 — Foundation
+  [ ] Supabase project setup + all SQL migrations
+  [ ] src/lib/supabaseClient.ts
+  [ ] src/lib/utils.ts (cn)
+  [ ] src/types/index.ts
+  [ ] src/hooks/useAuth.ts
+  [ ] src/components/Modal.tsx (use provided file)
+  [ ] src/components/GoogleSignInButton.tsx
+  [ ] src/components/SplashScreen.tsx
+  [ ] src/App.tsx (role router)
+
+Phase 2 — Landing Page
+  [ ] src/hooks/useToppers.ts, useCourses.ts (public)
+  [ ] src/pages/LandingPage.tsx (match provided reference exactly)
+  [ ] Enquiry + Demo modals saving to Supabase
+
+Phase 3 — Student Portal
+  [ ] src/hooks/useResults.ts, useAttendance.ts, useEnrollments.ts
+  [ ] src/pages/StudentPortal.tsx (match provided reference + add Attendance/Batches tabs)
+
+Phase 4 — Branch Dashboard
+  [ ] src/hooks/useStudents.ts, useTeachers.ts, useBatches.ts, useResults.ts
+  [ ] src/pages/BranchDashboard.tsx (match provided reference exactly)
+  [ ] Excel import with SheetJS
+  [ ] WhatsApp integration modal
+
+Phase 5 — Super Admin Dashboard
+  [ ] src/hooks/useBranches.ts, useAdmins.ts, useEnquiries.ts
+  [ ] src/pages/AdminDashboard.tsx (match provided reference exactly)
+  [ ] Pre-seed admin modal (invite by email)
+
+Phase 6 — Polish
+  [ ] Skeleton loaders for all data tables
+  [ ] motion animations on page mount (staggered card reveals)
+  [ ] Mobile responsiveness pass on all pages
+  [ ] Error boundary
+  [ ] Favicon + meta tags
+```
+
+---
+
+## SUPABASE GOOGLE OAUTH SETUP CHECKLIST
+
+In your Supabase Dashboard:
+1. Go to Authentication → Providers → Google → Enable
+2. Add your Google OAuth Client ID and Secret (from Google Cloud Console)
+3. Add `http://localhost:3000` and your production URL to "Redirect URLs"
+4. In Google Cloud Console → OAuth consent screen → add your domain
+5. In Google Cloud Console → Credentials → add `https://your-project.supabase.co/auth/v1/callback` as authorized redirect URI
+
+---
+
+*Build this exactly. Match the provided UI reference files pixel-for-pixel in terms of colors, spacing, component patterns, and interaction states. The design system is locked — your job is to wire it to real Supabase data.*
