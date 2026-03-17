@@ -53,7 +53,7 @@ export function StudentsTab() {
     const feesRemaining = Number(fd.get('fees_remaining')) || 0
     try {
       await updateAllowedEmail(editingStudent.email, { 
-        branch_id: branchId || null,
+        branch_id: branchId || undefined,
         fees_paid: feesPaid,
         fees_remaining: feesRemaining
       })
