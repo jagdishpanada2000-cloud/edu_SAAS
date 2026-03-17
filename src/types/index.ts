@@ -18,6 +18,8 @@ export interface Profile {
   role: 'super_admin' | 'branch_admin' | 'student'
   branch_id?: string
   phone?: string
+  fees_paid?: number
+  fees_remaining?: number
   branches?: Branch
   created_at: string
 }

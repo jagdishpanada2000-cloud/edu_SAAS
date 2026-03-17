@@ -29,7 +29,11 @@ export function BranchStudentsTab({ branchId }: Props) {
   )
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([['email'], ['student1@gmail.com'], ['student2@gmail.com']])
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['email', 'fees_paid', 'fees_remaining'],
+      ['student1@gmail.com', 5000, 15000],
+      ['student2@gmail.com', 0, 20000]
+    ])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Students')
     XLSX.writeFile(wb, 'student_import_template.xlsx')
@@ -42,10 +46,20 @@ export function BranchStudentsTab({ branchId }: Props) {
       const buffer = await file.arrayBuffer()
       const workbook = XLSX.read(buffer)
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json<{ email?: string }>(sheet)
+      const rows = XLSX.utils.sheet_to_json<{ 
+        email?: string; 
+        fees_paid?: number; 
+        fees_remaining?: number;
+      }>(sheet)
       const entries = rows
         .filter(r => r.email?.toString().trim())
-        .map(r => ({ email: r.email!.toString().trim().toLowerCase(), role: 'student' as const, branch_id: branchId || null }))
+        .map(r => ({ 
+          email: r.email!.toString().trim().toLowerCase(), 
+          role: 'student' as const, 
+          branch_id: branchId || null,
+          fees_paid: Number(r.fees_paid) || 0,
+          fees_remaining: Number(r.fees_remaining) || 0
+        }))
       const skipped = rows.length - entries.length
       if (entries.length === 0) { alert('No valid email rows found in the file.'); return }
       await bulkAddAllowedEmails(entries)
@@ -61,8 +75,16 @@ export function BranchStudentsTab({ branchId }: Props) {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     const email = (formData.get('email') as string).trim().toLowerCase()
+    const feesPaid = Number(formData.get('fees_paid')) || 0
+    const feesRemaining = Number(formData.get('fees_remaining')) || 0
     try {
-      await addAllowedEmail({ email, role: 'student', branch_id: branchId || null })
+      await addAllowedEmail({ 
+        email, 
+        role: 'student', 
+        branch_id: branchId || null,
+        fees_paid: feesPaid,
+        fees_remaining: feesRemaining
+      })
       setIsSubmitted(true)
       setTimeout(() => { setIsSubmitted(false); setIsAddOpen(false) }, 1500)
     } catch (err: unknown) {
@@ -111,15 +133,17 @@ export function BranchStudentsTab({ branchId }: Props) {
               <tr className="bg-white/5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
                 <th className="px-6 py-4">Name</th>
                 <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Fees Paid</th>
+                <th className="px-6 py-4">Fees Rem.</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2d2d2d]">
               {studentsLoading ? (
-                <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500">Loading students…</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">Loading students…</td></tr>
               ) : filteredStudents.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                   <Users className="mx-auto mb-3 w-10 h-10 opacity-20" />
                   <p>{searchTerm ? 'No students match your search' : 'No students yet'}</p>
                 </td></tr>
@@ -134,6 +158,12 @@ export function BranchStudentsTab({ branchId }: Props) {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-300">{student.email}</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-emerald-400">
+                    ₹{student.fees_paid?.toLocaleString() ?? 0}
+                  </td>
+                  <td className="px-6 py-4 text-sm font-semibold text-rose-400">
+                    ₹{student.fees_remaining?.toLocaleString() ?? 0}
+                  </td>
                   <td className="px-6 py-4"><span className="text-xs text-[#22c55e]">Active</span></td>
                   <td className="px-6 py-4 text-right">
                     <button onClick={() => { if (confirm('Remove this student?')) deleteStudent(student.id).catch(() => alert('Failed to delete student')) }}
@@ -158,8 +188,20 @@ export function BranchStudentsTab({ branchId }: Props) {
         ) : (
           <form onSubmit={handleAddStudent} className="space-y-4">
             <p className="text-xs text-slate-500">The student will be able to sign in using this Gmail address.</p>
-            <div><label className={lbl}>Student Gmail</label>
-              <input name="email" required type="email" className={inp} placeholder="student@gmail.com" /></div>
+            <div>
+              <label className={lbl}>Student Gmail</label>
+              <input name="email" required type="email" className={inp} placeholder="student@gmail.com" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Fees Paid (₹)</label>
+                <input name="fees_paid" type="number" className={inp} defaultValue={0} min={0} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Remaining (₹)</label>
+                <input name="fees_remaining" type="number" className={inp} defaultValue={0} min={0} />
+              </div>
+            </div>
             <button type="submit" className="w-full bg-[#22c55e] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">Add Student</button>
           </form>
         )}
