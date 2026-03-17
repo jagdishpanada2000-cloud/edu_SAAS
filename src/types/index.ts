@@ -160,6 +160,8 @@ export interface AllowedEmail {
   full_name?: string
   phone?: string
   parent_phone?: string
+  fees_paid?: number
+  fees_remaining?: number
   created_at?: string
   branches?: Branch
 }

@@ -25,8 +25,16 @@ export function StudentsTab() {
     const fd = new FormData(e.currentTarget)
     const email = (fd.get('email') as string).trim().toLowerCase()
     const branchId = fd.get('branch_id') as string
+    const feesPaid = Number(fd.get('fees_paid')) || 0
+    const feesRemaining = Number(fd.get('fees_remaining')) || 0
     try {
-      await addAllowedEmail({ email, role: 'student', branch_id: branchId || null })
+      await addAllowedEmail({ 
+        email, 
+        role: 'student', 
+        branch_id: branchId || null,
+        fees_paid: feesPaid,
+        fees_remaining: feesRemaining
+      })
       setSubmitted(true)
       setTimeout(() => { setSubmitted(false); setIsAddOpen(false) }, 1500)
     } catch (err: unknown) {
@@ -36,9 +44,9 @@ export function StudentsTab() {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['email', 'branch_name'],
-      ['student1@gmail.com', 'Main Branch'],
-      ['student2@gmail.com', ''],
+      ['email', 'branch_name', 'fees_paid', 'fees_remaining'],
+      ['student1@gmail.com', 'Main Branch', 5000, 15000],
+      ['student2@gmail.com', '', 0, 20000],
     ])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Students')
@@ -51,7 +59,13 @@ export function StudentsTab() {
     try {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf)
-      const rows = XLSX.utils.sheet_to_json<{ email?: string; branch_name?: string }>(wb.Sheets[wb.SheetNames[0]])
+      const rows = XLSX.utils.sheet_to_json<{ 
+        email?: string; 
+        branch_name?: string;
+        fees_paid?: number;
+        fees_remaining?: number;
+      }>(wb.Sheets[wb.SheetNames[0]])
+      
       const entries = rows
         .filter(r => r.email?.toString().trim())
         .map(r => ({
@@ -60,6 +74,8 @@ export function StudentsTab() {
           branch_id: r.branch_name
             ? (branches.find(b => b.name.toLowerCase() === r.branch_name!.toLowerCase())?.id ?? null)
             : null,
+          fees_paid: Number(r.fees_paid) || 0,
+          fees_remaining: Number(r.fees_remaining) || 0
         }))
       if (entries.length === 0) { alert('No valid email rows found.'); return }
       await bulkAddAllowedEmails(entries)
@@ -112,6 +128,8 @@ export function StudentsTab() {
                 <tr className="bg-[#0f0f0f]/50 text-xs text-slate-500 uppercase tracking-wider">
                   <th className="px-6 py-3 font-semibold">Email</th>
                   <th className="px-6 py-3 font-semibold">Branch</th>
+                  <th className="px-6 py-3 font-semibold">Fees Paid</th>
+                  <th className="px-6 py-3 font-semibold">Fees Rem.</th>
                   <th className="px-6 py-3 font-semibold">Added</th>
                   <th className="px-6 py-3 font-semibold text-right">Actions</th>
                 </tr>
@@ -128,6 +146,12 @@ export function StudentsTab() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-400">{student.branches?.name ?? 'Unassigned'}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-emerald-400">
+                      ₹{student.fees_paid?.toLocaleString() ?? 0}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold text-rose-400">
+                      ₹{student.fees_remaining?.toLocaleString() ?? 0}
+                    </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {student.created_at ? new Date(student.created_at).toLocaleDateString('en-IN') : '—'}
                     </td>
@@ -160,6 +184,16 @@ export function StudentsTab() {
             <div>
               <label className={lbl}>Student Gmail</label>
               <input name="email" required type="email" className={inp} placeholder="student@gmail.com" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Fees Paid (₹)</label>
+                <input name="fees_paid" type="number" className={inp} defaultValue={0} min={0} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Remaining (₹)</label>
+                <input name="fees_remaining" type="number" className={inp} defaultValue={0} min={0} />
+              </div>
             </div>
             <div>
               <label className={lbl}>Assign Branch (optional)</label>

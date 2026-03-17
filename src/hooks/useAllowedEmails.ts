@@ -22,10 +22,22 @@ export function useAllowedEmails() {
       })
   }, [])
 
-  const addAllowedEmail = async (entry: { email: string; role: AllowedEmail['role']; branch_id?: string | null }) => {
+  const addAllowedEmail = async (entry: { 
+    email: string; 
+    role: AllowedEmail['role']; 
+    branch_id?: string | null;
+    fees_paid?: number;
+    fees_remaining?: number;
+  }) => {
     const { data, error } = await supabase
       .from('allowed_emails')
-      .insert({ email: entry.email, role: entry.role, branch_id: entry.branch_id ?? null })
+      .insert({ 
+        email: entry.email, 
+        role: entry.role, 
+        branch_id: entry.branch_id ?? null,
+        fees_paid: entry.fees_paid ?? 0,
+        fees_remaining: entry.fees_remaining ?? 0
+      })
       .select('*, branches(name)')
       .single()
     if (error) throw error
@@ -33,11 +45,23 @@ export function useAllowedEmails() {
     return data
   }
 
-  const bulkAddAllowedEmails = async (entries: Array<{ email: string; role: AllowedEmail['role']; branch_id?: string | null }>) => {
+  const bulkAddAllowedEmails = async (entries: Array<{ 
+    email: string; 
+    role: AllowedEmail['role']; 
+    branch_id?: string | null;
+    fees_paid?: number;
+    fees_remaining?: number;
+  }>) => {
     const { error } = await supabase
       .from('allowed_emails')
       .upsert(
-        entries.map(e => ({ email: e.email, role: e.role, branch_id: e.branch_id ?? null })),
+        entries.map(e => ({ 
+          email: e.email, 
+          role: e.role, 
+          branch_id: e.branch_id ?? null,
+          fees_paid: e.fees_paid ?? 0,
+          fees_remaining: e.fees_remaining ?? 0
+        })),
         { onConflict: 'email', ignoreDuplicates: true }
       )
     if (error) throw error
