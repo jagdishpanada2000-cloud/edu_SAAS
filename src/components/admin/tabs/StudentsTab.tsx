@@ -1,19 +1,21 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Users, Download, Upload, UserPlus, CheckCircle2 } from 'lucide-react'
+import { Users, Download, Upload, UserPlus, CheckCircle2, Pencil } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { Modal } from '@/components/Modal'
 import { useAllowedEmails } from '@/hooks/useAllowedEmails'
 import { useBranches } from '@/hooks/useBranches'
+import { AllowedEmail } from '@/types'
 
 const inp = 'w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#13ec80]'
 const lbl = 'block text-xs font-bold text-slate-500 uppercase mb-1'
 
 export function StudentsTab() {
-  const { allowedEmails, addAllowedEmail, bulkAddAllowedEmails, removeAllowedEmail } = useAllowedEmails()
+  const { allowedEmails, addAllowedEmail, bulkAddAllowedEmails, removeAllowedEmail, updateAllowedEmail } = useAllowedEmails()
   const { branches } = useBranches()
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [editingStudent, setEditingStudent] = useState<AllowedEmail | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [importSummary, setImportSummary] = useState<{ success: number; skipped: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -39,6 +41,26 @@ export function StudentsTab() {
       setTimeout(() => { setSubmitted(false); setIsAddOpen(false) }, 1500)
     } catch (err: unknown) {
       alert(err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to add student')
+    }
+  }
+
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!editingStudent) return
+    const fd = new FormData(e.currentTarget)
+    const branchId = fd.get('branch_id') as string
+    const feesPaid = Number(fd.get('fees_paid')) || 0
+    const feesRemaining = Number(fd.get('fees_remaining')) || 0
+    try {
+      await updateAllowedEmail(editingStudent.email, { 
+        branch_id: branchId || null,
+        fees_paid: feesPaid,
+        fees_remaining: feesRemaining
+      })
+      setSubmitted(true)
+      setTimeout(() => { setSubmitted(false); setEditingStudent(null) }, 1500)
+    } catch (err: unknown) {
+      alert(err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to update student')
     }
   }
 
@@ -155,10 +177,17 @@ export function StudentsTab() {
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {student.created_at ? new Date(student.created_at).toLocaleDateString('en-IN') : '—'}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => { setSubmitted(false); setEditingStudent(student) }}
+                        className="text-slate-400 hover:text-[#13ec80] p-2 border border-[#2a2a2a] rounded-lg transition-colors"
+                        title="Edit Student"
+                      >
+                        <Pencil size={14} />
+                      </button>
                       <button
                         onClick={() => { if (confirm(`Remove ${student.email}?`)) removeAllowedEmail(student.email).catch(() => alert('Failed to remove student')) }}
-                        className="text-slate-400 hover:text-red-500 text-xs font-bold px-3 py-1 border border-[#2a2a2a] rounded-lg hover:border-red-500/30 transition-colors"
+                        className="text-slate-400 hover:text-red-500 text-xs font-bold px-3 py-2 border border-[#2a2a2a] rounded-lg hover:border-red-500/30 transition-colors"
                       >
                         Remove
                       </button>
@@ -204,6 +233,44 @@ export function StudentsTab() {
             </div>
             <button type="submit" className="w-full bg-[#13ec80] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">
               Add Student
+            </button>
+          </form>
+        )}
+      </Modal>
+
+      {/* Edit Student Modal */}
+      <Modal isOpen={!!editingStudent} onClose={() => setEditingStudent(null)} title="Edit Student Details">
+        {submitted ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <CheckCircle2 className="text-[#13ec80] w-16 h-16 mb-4 animate-bounce" />
+            <h4 className="text-xl font-bold mb-2">Student Updated!</h4>
+            <p className="text-slate-400">Details have been saved.</p>
+          </div>
+        ) : editingStudent && (
+          <form onSubmit={handleEdit} className="space-y-4">
+            <div>
+              <label className={lbl}>Student Email</label>
+              <input value={editingStudent.email} disabled className={inp + ' opacity-50 cursor-not-allowed'} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Fees Paid (₹)</label>
+                <input name="fees_paid" type="number" className={inp} defaultValue={editingStudent.fees_paid ?? 0} min={0} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Remaining (₹)</label>
+                <input name="fees_remaining" type="number" className={inp} defaultValue={editingStudent.fees_remaining ?? 0} min={0} />
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>Assigned Branch</label>
+              <select name="branch_id" className={inp} defaultValue={editingStudent.branch_id ?? ''}>
+                <option value="">— None —</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <button type="submit" className="w-full bg-[#13ec80] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">
+              Save Changes
             </button>
           </form>
         )}

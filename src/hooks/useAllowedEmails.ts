@@ -79,5 +79,17 @@ export function useAllowedEmails() {
     setAllowedEmails(prev => prev.filter(e => e.email !== email))
   }
 
-  return { allowedEmails, loading, error, addAllowedEmail, bulkAddAllowedEmails, removeAllowedEmail }
+  const updateAllowedEmail = async (email: string, updates: Partial<AllowedEmail>) => {
+    const { data, error } = await supabase
+      .from('allowed_emails')
+      .update(updates)
+      .eq('email', email)
+      .select('*, branches(name)')
+      .single()
+    if (error) throw error
+    if (data) setAllowedEmails(prev => prev.map(e => (e.email === email ? data : e)))
+    return data
+  }
+
+  return { allowedEmails, loading, error, addAllowedEmail, bulkAddAllowedEmails, removeAllowedEmail, updateAllowedEmail }
 }
