@@ -26,6 +26,9 @@ export function StudentsTab() {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     const email = (fd.get('email') as string).trim().toLowerCase()
+    const fullName = (fd.get('full_name') as string).trim()
+    const phone = (fd.get('phone') as string).trim()
+    const parentPhone = (fd.get('parent_phone') as string).trim()
     const branchId = fd.get('branch_id') as string
     const feesPaid = Number(fd.get('fees_paid')) || 0
     const feesRemaining = Number(fd.get('fees_remaining')) || 0
@@ -33,6 +36,9 @@ export function StudentsTab() {
       await addAllowedEmail({ 
         email, 
         role: 'student', 
+        full_name: fullName || undefined,
+        phone: phone || undefined,
+        parent_phone: parentPhone || undefined,
         branch_id: branchId || null,
         fees_paid: feesPaid,
         fees_remaining: feesRemaining
@@ -48,11 +54,17 @@ export function StudentsTab() {
     e.preventDefault()
     if (!editingStudent) return
     const fd = new FormData(e.currentTarget)
+    const fullName = (fd.get('full_name') as string).trim()
+    const phone = (fd.get('phone') as string).trim()
+    const parentPhone = (fd.get('parent_phone') as string).trim()
     const branchId = fd.get('branch_id') as string
     const feesPaid = Number(fd.get('fees_paid')) || 0
     const feesRemaining = Number(fd.get('fees_remaining')) || 0
     try {
       await updateAllowedEmail(editingStudent.email, { 
+        full_name: fullName || undefined,
+        phone: phone || undefined,
+        parent_phone: parentPhone || undefined,
         branch_id: branchId || undefined,
         fees_paid: feesPaid,
         fees_remaining: feesRemaining
@@ -60,9 +72,9 @@ export function StudentsTab() {
       setSubmitted(true)
       setTimeout(() => { setSubmitted(false); setEditingStudent(null) }, 1500)
     } catch (err: unknown) {
-      alert(err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to update student')
-    }
-  }
+      alert(err &full_name', 'phone', 'parent_phone', 'branch_name', 'fees_paid', 'fees_remaining'],
+      ['student1@gmail.com', 'John Doe', '9876543210', '9876543211', 'Main Branch', 5000, 15000],
+      ['student2@gmail.com', 'Jane Smith', '9876543212', '
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
@@ -83,6 +95,9 @@ export function StudentsTab() {
       const wb = XLSX.read(buf)
       const rows = XLSX.utils.sheet_to_json<{ 
         email?: string; 
+        full_name?: string;
+        phone?: string;
+        parent_phone?: string;
         branch_name?: string;
         fees_paid?: number;
         fees_remaining?: number;
@@ -93,6 +108,9 @@ export function StudentsTab() {
         .map(r => ({
           email: r.email!.toString().trim().toLowerCase(),
           role: 'student' as const,
+          full_name: r.full_name?.toString() || undefined,
+          phone: r.phone?.toString() || undefined,
+          parent_phone: r.parent_phone?.toString() || undefined,
           branch_id: r.branch_name
             ? (branches.find(b => b.name.toLowerCase() === r.branch_name!.toLowerCase())?.id ?? null)
             : null,
@@ -142,17 +160,11 @@ export function StudentsTab() {
             <Users className="mx-auto mb-4 w-12 h-12 opacity-20" />
             <p className="font-medium mb-1">No students yet</p>
             <p className="text-xs">Add students manually or import a list via Excel.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#0f0f0f]/50 text-xs text-slate-500 uppercase tracking-wider">
-                  <th className="px-6 py-3 font-semibold">Email</th>
+          </div>Student</th>
+                  <th className="px-6 py-3 font-semibold">Contact Info</th>
                   <th className="px-6 py-3 font-semibold">Branch</th>
                   <th className="px-6 py-3 font-semibold">Fees Paid</th>
                   <th className="px-6 py-3 font-semibold">Fees Rem.</th>
-                  <th className="px-6 py-3 font-semibold">Added</th>
                   <th className="px-6 py-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
@@ -161,14 +173,26 @@ export function StudentsTab() {
                   <tr key={student.email} className="hover:bg-white/5 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 font-bold">
+                          {student.full_name ? student.full_name[0].toUpperCase() : student.email[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-semibold">{student.full_name || '—'}</div>
+                          <div className="text-xs text-slate-500">{student.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm">
+                        <div className="text-slate-300">📱 {student.phone || 'No phone'}</div>
+                        <div className="text-xs text-slate-500">🏠 {student.parent_phone || 'No parent phone'}</div>
+                      </div>
+                    </td><,oldString:v className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
                           <Users size={14} className="text-blue-400" />
                         </div>
                         <span className="font-medium">{student.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-400">{student.branches?.name ?? 'Unassigned'}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-emerald-400">
+                      </div>sm font-semibold text-emerald-400">
                       ₹{student.fees_paid?.toLocaleString() ?? 0}
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-rose-400">
@@ -204,17 +228,23 @@ export function StudentsTab() {
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Add Student">
         {submitted ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <CheckCircle2 className="text-[#13ec80] w-16 h-16 mb-4 animate-bounce" />
-            <h4 className="text-xl font-bold mb-2">Student Added!</h4>
-            <p className="text-slate-400">They can now sign in with their Google account.</p>
-          </div>
-        ) : (
-          <form onSubmit={handleAdd} className="space-y-4">
-            <div>
-              <label className={lbl}>Student Gmail</label>
-              <input name="email" required type="email" className={inp} placeholder="student@gmail.com" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            <Che className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className={lbl}>Student Email</label>
+                <input name="email" required type="email" className={inp} placeholder="student@gmail.com" />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Full Name</label>
+                <input name="full_name" className={inp} placeholder="Jane Doe" />
+              </div>
+              <div>
+                <label className={lbl}>Phone</label>
+                <input name="phone" className={inp} placeholder="Student Phone" />
+              </div>
+              <div>
+                <label className={lbl}>Parent Phone</label>
+                <input name="parent_phone" className={inp} placeholder="Parent Phone" />
+              </div>
               <div>
                 <label className={lbl}>Fees Paid (₹)</label>
                 <input name="fees_paid" type="number" className={inp} defaultValue={0} min={0} />
@@ -223,13 +253,13 @@ export function StudentsTab() {
                 <label className={lbl}>Fees Remaining (₹)</label>
                 <input name="fees_remaining" type="number" className={inp} defaultValue={0} min={0} />
               </div>
-            </div>
-            <div>
-              <label className={lbl}>Assign Branch (optional)</label>
-              <select name="branch_id" className={inp}>
-                <option value="">— None —</option>
-                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <div className="col-span-2">
+                <label className={lbl}>Assign Branch (optional)</label>
+                <select name="branch_id" className={inp}>
+                  <option value="">— None —</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
             </div>
             <button type="submit" className="w-full bg-[#13ec80] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">
               Add Student
@@ -242,6 +272,51 @@ export function StudentsTab() {
       <Modal isOpen={!!editingStudent} onClose={() => setEditingStudent(null)} title="Edit Student Details">
         {submitted ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
+            <CheckCircle2 className="text-[#13ec80] w-16 h-16 mb-4 animate-bounce" />
+            <h4 className="text-xl font-bold mb-2">Student Updated!</h4>
+            <p className="text-slate-400">Details have been saved.</p>
+          </div>
+        ) : editingStudent && (
+          <form onSubmit={handleEdit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 opacity-50">
+                <label className={lbl}>Email (Cannot change)</label>
+                <input className={inp} value={editingStudent.email} disabled />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Full Name</label>
+                <input name="full_name" className={inp} defaultValue={editingStudent.full_name || ''} />
+              </div>
+              <div>
+                <label className={lbl}>Phone</label>
+                <input name="phone" className={inp} defaultValue={editingStudent.phone || ''} />
+              </div>
+              <div>
+                <label className={lbl}>Parent Phone</label>
+                <input name="parent_phone" className={inp} defaultValue={editingStudent.parent_phone || ''} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Paid (₹)</label>
+                <input name="fees_paid" type="number" className={inp} defaultValue={editingStudent.fees_paid ?? 0} min={0} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Remaining (₹)</label>
+                <input name="fees_remaining" type="number" className={inp} defaultValue={editingStudent.fees_remaining ?? 0} min={0} />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Assign Branch</label>
+                <select name="branch_id" className={inp} defaultValue={editingStudent.branch_id || ''}>
+                  <option value="">— None —</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <button type="submit" className="w-full bg-[#13ec80] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">
+              Update Student
+            </button>
+          </form>
+        )}
+      </Modaly-center py-8 text-center">
             <CheckCircle2 className="text-[#13ec80] w-16 h-16 mb-4 animate-bounce" />
             <h4 className="text-xl font-bold mb-2">Student Updated!</h4>
             <p className="text-slate-400">Details have been saved.</p>

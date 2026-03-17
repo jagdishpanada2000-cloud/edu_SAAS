@@ -26,6 +26,9 @@ export function useAllowedEmails() {
     email: string; 
     role: AllowedEmail['role']; 
     branch_id?: string | null;
+    full_name?: string;
+    phone?: string;
+    parent_phone?: string;
     fees_paid?: number;
     fees_remaining?: number;
   }) => {
@@ -35,6 +38,9 @@ export function useAllowedEmails() {
         email: entry.email, 
         role: entry.role, 
         branch_id: entry.branch_id ?? null,
+        full_name: entry.full_name ?? null,
+        phone: entry.phone ?? null,
+        parent_phone: entry.parent_phone ?? null,
         fees_paid: entry.fees_paid ?? 0,
         fees_remaining: entry.fees_remaining ?? 0
       })
@@ -49,6 +55,9 @@ export function useAllowedEmails() {
     email: string; 
     role: AllowedEmail['role']; 
     branch_id?: string | null;
+    full_name?: string;
+    phone?: string;
+    parent_phone?: string;
     fees_paid?: number;
     fees_remaining?: number;
   }>) => {
@@ -59,6 +68,9 @@ export function useAllowedEmails() {
           email: e.email, 
           role: e.role, 
           branch_id: e.branch_id ?? null,
+          full_name: e.full_name ?? null,
+          phone: e.phone ?? null,
+          parent_phone: e.parent_phone ?? null,
           fees_paid: e.fees_paid ?? 0,
           fees_remaining: e.fees_remaining ?? 0
         })),

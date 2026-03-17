@@ -35,9 +35,9 @@ export function BranchStudentsTab({ branchId }: Props) {
 
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['email', 'fees_paid', 'fees_remaining'],
-      ['student1@gmail.com', 5000, 15000],
-      ['student2@gmail.com', 0, 20000]
+      ['email', 'full_name', 'phone', 'parent_phone', 'fees_paid', 'fees_remaining'],
+      ['student1@gmail.com', 'John Doe', '9876543210', '9876543211', 5000, 15000],
+      ['student2@gmail.com', 'Jane Smith', '9876543212', '', 0, 20000]
     ])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Students')
@@ -53,6 +53,9 @@ export function BranchStudentsTab({ branchId }: Props) {
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json<{ 
         email?: string; 
+        full_name?: string;
+        phone?: string;
+        parent_phone?: string;
         fees_paid?: number; 
         fees_remaining?: number;
       }>(sheet)
@@ -62,6 +65,9 @@ export function BranchStudentsTab({ branchId }: Props) {
           email: r.email!.toString().trim().toLowerCase(), 
           role: 'student' as const, 
           branch_id: branchId || null,
+          full_name: r.full_name?.toString() || undefined,
+          phone: r.phone?.toString() || undefined,
+          parent_phone: r.parent_phone?.toString() || undefined,
           fees_paid: Number(r.fees_paid) || 0,
           fees_remaining: Number(r.fees_remaining) || 0
         }))
@@ -80,6 +86,9 @@ export function BranchStudentsTab({ branchId }: Props) {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     const email = (formData.get('email') as string).trim().toLowerCase()
+    const fullName = (formData.get('full_name') as string).trim()
+    const phone = (formData.get('phone') as string).trim()
+    const parentPhone = (formData.get('parent_phone') as string).trim()
     const feesPaid = Number(formData.get('fees_paid')) || 0
     const feesRemaining = Number(formData.get('fees_remaining')) || 0
     try {
@@ -87,6 +96,9 @@ export function BranchStudentsTab({ branchId }: Props) {
         email, 
         role: 'student', 
         branch_id: branchId || null,
+        full_name: fullName || undefined,
+        phone: phone || undefined,
+        parent_phone: parentPhone || undefined,
         fees_paid: feesPaid,
         fees_remaining: feesRemaining
       })
@@ -101,10 +113,16 @@ export function BranchStudentsTab({ branchId }: Props) {
     e.preventDefault()
     if (!editingStudent) return
     const formData = new FormData(e.currentTarget)
+    const fullName = (formData.get('full_name') as string).trim()
+    const phone = (formData.get('phone') as string).trim()
+    const parentPhone = (formData.get('parent_phone') as string).trim()
     const feesPaid = Number(formData.get('fees_paid')) || 0
     const feesRemaining = Number(formData.get('fees_remaining')) || 0
     try {
       await updateAllowedEmail(editingStudent.email, { 
+        full_name: fullName || undefined,
+        phone: phone || undefined,
+        parent_phone: parentPhone || undefined,
         fees_paid: feesPaid,
         fees_remaining: feesRemaining
       })
@@ -148,14 +166,8 @@ export function BranchStudentsTab({ branchId }: Props) {
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white/5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4">Email</th>
+          </div>Student</th>
+                <th className="px-6 py-4">Contact Info</th>
                 <th className="px-6 py-4">Fees Paid</th>
                 <th className="px-6 py-4">Fees Rem.</th>
                 <th className="px-6 py-4">Status</th>
@@ -174,7 +186,21 @@ export function BranchStudentsTab({ branchId }: Props) {
                 <tr key={student.email} className="hover:bg-white/5 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="size-8 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-xs font-bold">
+                      <div className="size-10 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-sm font-bold">
+                        {(student.full_name || student.email)[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-medium text-white">{student.full_name || '—'}</div>
+                        <div className="text-xs text-slate-500">{student.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm">
+                      <div className="text-slate-300">📱 {student.phone || 'No phone'}</div>
+                      <div className="text-xs text-slate-500">🏠 {student.parent_phone || 'No parent phone'}</div>
+                    </div>
+                  merald-500 flex items-center justify-center text-xs font-bold">
                         {(student.full_name ?? student.email)[0].toUpperCase()}
                       </div>
                       <span className="font-medium">{student.full_name ?? '—'}</span>
@@ -210,20 +236,23 @@ export function BranchStudentsTab({ branchId }: Props) {
       </section>
 
       <Modal isOpen={isAddOpen} onClose={() => setIsAddOpen(false)} title="Add Student">
-        {isSubmitted ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <CheckCircle2 className="text-[#22c55e] w-16 h-16 mb-4 animate-bounce" />
-            <h4 className="text-xl font-bold mb-2">Student Added!</h4>
-            <p className="text-slate-400">They can now sign in with their Google account.</p>
-          </div>
-        ) : (
-          <form onSubmit={handleAddStudent} className="space-y-4">
-            <p className="text-xs text-slate-500">The student will be able to sign in using this Gmail address.</p>
-            <div>
-              <label className={lbl}>Student Gmail</label>
-              <input name="email" required type="email" className={inp} placeholder="student@gmail.com" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+        {isSudiv className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className={lbl}>Student Email</label>
+                <input name="email" required type="email" className={inp} placeholder="student@gmail.com" />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Full Name</label>
+                <input name="full_name" className={inp} placeholder="Jane Doe" />
+              </div>
+              <div>
+                <label className={lbl}>Phone</label>
+                <input name="phone" className={inp} placeholder="Student Phone" />
+              </div>
+              <div>
+                <label className={lbl}>Parent Phone</label>
+                <input name="parent_phone" className={inp} placeholder="Parent Phone" />
+              </div>
               <div>
                 <label className={lbl}>Fees Paid (₹)</label>
                 <input name="fees_paid" type="number" className={inp} defaultValue={0} min={0} />
@@ -238,8 +267,45 @@ export function BranchStudentsTab({ branchId }: Props) {
         )}
       </Modal>
 
-      <Modal isOpen={isEditOpen} onClose={() => { setIsEditOpen(false); setEditingStudent(null) }} title="Edit Student Fees">
+      <Modal isOpen={isEditOpen} onClose={() => { setIsEditOpen(false); setEditingStudent(null) }} title="Edit Student Details">
         {isSubmitted ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <CheckCircle2 className="text-[#22c55e] w-16 h-16 mb-4 animate-bounce" />
+            <h4 className="text-xl font-bold mb-2">Details Updated!</h4>
+            <p className="text-slate-400">Student information has been saved.</p>
+          </div>
+        ) : editingStudent && (
+          <form onSubmit={handleEditStudent} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 opacity-50">
+                <label className={lbl}>Email (Cannot change)</label>
+                <input className={inp} value={editingStudent.email} disabled />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Full Name</label>
+                <input name="full_name" className={inp} defaultValue={editingStudent.full_name || ''} />
+              </div>
+              <div>
+                <label className={lbl}>Phone</label>
+                <input name="phone" className={inp} defaultValue={editingStudent.phone || ''} />
+              </div>
+              <div>
+                <label className={lbl}>Parent Phone</label>
+                <input name="parent_phone" className={inp} defaultValue={editingStudent.parent_phone || ''} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Paid (₹)</label>
+                <input name="fees_paid" type="number" className={inp} defaultValue={editingStudent.fees_paid ?? 0} min={0} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Remaining (₹)</label>
+                <input name="fees_remaining" type="number" className={inp} defaultValue={editingStudent.fees_remaining ?? 0} min={0} />
+              </div>
+            </div>
+            <button type="submit" className="w-full bg-[#22c55e] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">Update Student</button>
+          </form>
+        )}
+      </Modaltted ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <CheckCircle2 className="text-[#22c55e] w-16 h-16 mb-4 animate-bounce" />
             <h4 className="text-xl font-bold mb-2">Details Updated!</h4>
