@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Download, Upload, UserPlus, CheckCircle2, Users, Trash2, Search } from 'lucide-react'
+import { Download, Upload, UserPlus, CheckCircle2, Users, Trash2, Search, Pencil } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { useStudents } from '@/hooks/useStudents'
 import { useAllowedEmails } from '@/hooks/useAllowedEmails'
+import { AllowedEmail } from '@/types'
 
 interface Props {
   branchId: string
@@ -16,14 +17,18 @@ const lbl = 'block text-xs font-bold text-slate-500 uppercase mb-1'
 
 export function BranchStudentsTab({ branchId }: Props) {
   const { students, deleteStudent, loading: studentsLoading } = useStudents(branchId)
-  const { addAllowedEmail, bulkAddAllowedEmails } = useAllowedEmails()
+  const { allowedEmails, addAllowedEmail, bulkAddAllowedEmails, removeAllowedEmail, updateAllowedEmail } = useAllowedEmails()
   const [searchTerm, setSearchTerm] = React.useState('')
   const [isAddOpen, setIsAddOpen] = React.useState(false)
+  const [isEditOpen, setIsEditOpen] = React.useState(false)
+  const [editingStudent, setEditingStudent] = React.useState<AllowedEmail | null>(null)
   const [isSubmitted, setIsSubmitted] = React.useState(false)
   const [importSummary, setImportSummary] = React.useState<{ success: number; skipped: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const filteredStudents = students.filter(s =>
+  const branchStudents = allowedEmails.filter(e => e.role === 'student' && e.branch_id === branchId)
+
+  const filteredStudents = branchStudents.filter(s =>
     (s.full_name ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (s.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -92,6 +97,24 @@ export function BranchStudentsTab({ branchId }: Props) {
     }
   }
 
+  const handleEditStudent = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!editingStudent) return
+    const formData = new FormData(e.currentTarget)
+    const feesPaid = Number(formData.get('fees_paid')) || 0
+    const feesRemaining = Number(formData.get('fees_remaining')) || 0
+    try {
+      await updateAllowedEmail(editingStudent.email, { 
+        fees_paid: feesPaid,
+        fees_remaining: feesRemaining
+      })
+      setIsSubmitted(true)
+      setTimeout(() => { setIsSubmitted(false); setIsEditOpen(false); setEditingStudent(null) }, 1500)
+    } catch (err: unknown) {
+      alert(err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : 'Failed to update student')
+    }
+  }
+
   return (
     <>
       <section className="bg-[#1b1b1b] rounded-xl border border-[#2d2d2d] overflow-hidden">
@@ -148,11 +171,11 @@ export function BranchStudentsTab({ branchId }: Props) {
                   <p>{searchTerm ? 'No students match your search' : 'No students yet'}</p>
                 </td></tr>
               ) : filteredStudents.map(student => (
-                <tr key={student.id} className="hover:bg-white/5 transition-colors">
+                <tr key={student.email} className="hover:bg-white/5 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="size-8 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-xs font-bold">
-                        {(student.full_name ?? 'S')[0]}
+                        {(student.full_name ?? student.email)[0].toUpperCase()}
                       </div>
                       <span className="font-medium">{student.full_name ?? '—'}</span>
                     </div>
@@ -165,10 +188,18 @@ export function BranchStudentsTab({ branchId }: Props) {
                     ₹{student.fees_remaining?.toLocaleString() ?? 0}
                   </td>
                   <td className="px-6 py-4"><span className="text-xs text-[#22c55e]">Active</span></td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => { if (confirm('Remove this student?')) deleteStudent(student.id).catch(() => alert('Failed to delete student')) }}
-                      className="text-slate-400 hover:text-red-500 transition-colors">
-                      <Trash2 size={18} />
+                  <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                    <button 
+                      onClick={() => { setIsSubmitted(false); setEditingStudent(student); setIsEditOpen(true) }}
+                      className="text-slate-400 hover:text-[#22c55e] p-2 border border-[#2d2d2d] rounded-lg transition-colors"
+                      title="Edit Student"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => { if (confirm(`Remove ${student.email}?`)) removeAllowedEmail(student.email).catch(() => alert('Failed to delete student')) }}
+                      className="text-slate-400 hover:text-red-500 p-2 border border-[#2d2d2d] rounded-lg hover:border-red-500/30 transition-colors"
+                    >
+                      <Trash2 size={16} />
                     </button>
                   </td>
                 </tr>
@@ -203,6 +234,36 @@ export function BranchStudentsTab({ branchId }: Props) {
               </div>
             </div>
             <button type="submit" className="w-full bg-[#22c55e] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">Add Student</button>
+          </form>
+        )}
+      </Modal>
+
+      <Modal isOpen={isEditOpen} onClose={() => { setIsEditOpen(false); setEditingStudent(null) }} title="Edit Student Fees">
+        {isSubmitted ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <CheckCircle2 className="text-[#22c55e] w-16 h-16 mb-4 animate-bounce" />
+            <h4 className="text-xl font-bold mb-2">Details Updated!</h4>
+            <p className="text-slate-400">Student fee information has been saved.</p>
+          </div>
+        ) : editingStudent && (
+          <form onSubmit={handleEditStudent} className="space-y-4">
+            <div>
+              <label className={lbl}>Student Email</label>
+              <input value={editingStudent.email} disabled className={inp + ' opacity-50'} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Fees Paid (₹)</label>
+                <input name="fees_paid" type="number" className={inp} defaultValue={editingStudent.fees_paid ?? 0} min={0} />
+              </div>
+              <div>
+                <label className={lbl}>Fees Remaining (₹)</label>
+                <input name="fees_remaining" type="number" className={inp} defaultValue={editingStudent.fees_remaining ?? 0} min={0} />
+              </div>
+            </div>
+            <button type="submit" className="w-full bg-[#22c55e] text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity mt-4">
+              Save Changes
+            </button>
           </form>
         )}
       </Modal>
