@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       Total Marks: ${testResults[0]?.total_marks || 100}
       
       Data: 
-      ${JSON.stringify(testResults.map(r => ({ name: r.student_name, email: r.student_email, marks: r.marks_obtained })))}
+      ${JSON.stringify(testResults.map((r: any) => ({ name: r.student_name, email: r.student_email, marks: r.marks_obtained })))}
 
       Instructions:
       - Answer questions about student performance based ONLY on the provided data.
